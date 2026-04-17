@@ -15,6 +15,7 @@ from .parser import Parser
 from .prover import Prover
 from .sequent import Sequent
 from .python_parser import PythonParser
+from .proof_node import ProofNode
 
 __all__ = [
     "Checker",
@@ -22,4 +23,5 @@ __all__ = [
     "Prover",
     "Sequent",
     "PythonParser",
+    'ProofNode',
 ]

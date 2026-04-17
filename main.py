@@ -4,22 +4,33 @@ from core.python_parser import PythonParser
 from core.prover import Prover
 from core.sequent import Sequent
 from core.formulas.atomic import Atomic
-from core.formulas.implication import Implication
-from core.formulas.equivalence import Equivalence
 from core.formulas.negation import Negation
 
 
+def print_tree(node, indent=0):
+    """Pretty-print a ProofNode tree."""
+    print("  " * indent + f"{node.rule}: {node.sequent}")
+    for p in node.premises:
+        print_tree(p, indent + 1)
+
+
 def check_sequent_status(prover, sequent):
-    result = prover.prove(sequent)
-    if result == "proven":
+    """
+    Determine whether a sequent is proven, disproven, or unknown.
+    IMPORTANT: does NOT overwrite the proof tree for the original sequent.
+    """
+    status, tree = prover._prove(sequent, 0)
+    prover.last_proof_tree = tree  # preserve the original proof tree
+
+    if status == "proven":
         return "proven"
-    # For unprovable check, negate the succedent
-    if isinstance(sequent, Sequent):
-        negated_seq = Sequent(sequent.antecedent, Negation(sequent.succedent))
-    else:
-        negated_seq = (sequent[0], Negation(sequent[1]))
-    if prover.prove(negated_seq) == "proven":
+
+    negated_seq = Sequent(sequent.antecedent, Negation(sequent.succedent))
+    status_neg, _ = prover._prove(negated_seq, 0)
+
+    if status_neg == "proven":
         return "disproven"
+
     return "unknown"
 
 
@@ -41,22 +52,28 @@ def main():
 
     for text, ant in tests:
         formula = parser.parse(text)
-        seq = Sequent(ant, formula)  # Use Sequent class
-        print(f"Proving {seq}: {check_sequent_status(prover, seq)}")
+        seq = Sequent(ant, formula)
+        status = check_sequent_status(prover, seq)
+        print(f"\nProving {seq}: {status}")
+        if prover.last_proof_tree:
+            print_tree(prover.last_proof_tree)
 
     print("\n=== NON-PROVABLE / UNKNOWN SEQUENTS ===")
     tests = [
-        ("¬A", []),               # should be unknown
-        ("A", []),                # not provable
-        ("¬¬A -> A", []),         # not intuitionistically valid
-        ("A ∨ ¬A", []),           # LEM not provable
-        ("A ∧ ¬A", []),           # contradiction
+        ("¬A", []),
+        ("A", []),
+        ("¬¬A -> A", []),
+        ("A ∨ ¬A", []),
+        ("A ∧ ¬A", []),
     ]
 
     for text, ant in tests:
         formula = parser.parse(text)
         seq = Sequent(ant, formula)
-        print(f"Proving {seq}: {check_sequent_status(prover, seq)}")
+        status = check_sequent_status(prover, seq)
+        print(f"\nProving {seq}: {status}")
+        if prover.last_proof_tree:
+            print_tree(prover.last_proof_tree)
 
     print("\n=== EXPLOSION TESTS (Γ, ⊥ ⇒ anything) ===")
     A = Atomic("A")
@@ -64,23 +81,29 @@ def main():
     notA = Negation(A)
 
     explosion_tests = [
-        ([A, notA], B),           # A, ¬A ⇒ B  should be provable
-        ([notA], A),              # ¬A ⇒ A     unknown
+        ([A, notA], B),
+        ([notA], A),
     ]
 
     for ant, succ in explosion_tests:
         seq = Sequent(ant, succ)
-        print(f"Proving {seq}: {check_sequent_status(prover, seq)}")
+        status = check_sequent_status(prover, seq)
+        print(f"\nProving {seq}: {status}")
+        if prover.last_proof_tree:
+            print_tree(prover.last_proof_tree)
 
     print("\n=== DOUBLE NEGATION TESTS ===")
     dn_tests = [
-        ([], Negation(Negation(A))),   # ⇒ ¬¬A  provable
-        ([Negation(Negation(A))], A),  # ¬¬A ⇒ A unknown
+        ([], Negation(Negation(A))),
+        ([Negation(Negation(A))], A),
     ]
 
     for ant, succ in dn_tests:
         seq = Sequent(ant, succ)
-        print(f"Proving {seq}: {check_sequent_status(prover, seq)}")
+        status = check_sequent_status(prover, seq)
+        print(f"\nProving {seq}: {status}")
+        if prover.last_proof_tree:
+            print_tree(prover.last_proof_tree)
 
     print("\n=== PYTHON PARSER TESTS ===")
 
@@ -94,7 +117,10 @@ def func(x):
 '''
     formula5 = python_parser.parse_function(func_code)
     seq5 = Sequent([], formula5)
-    print(f"Proving {seq5}: {check_sequent_status(prover, seq5)}")
+    status = check_sequent_status(prover, seq5)
+    print(f"\nProving {seq5}: {status}")
+    if prover.last_proof_tree:
+        print_tree(prover.last_proof_tree)
 
     func_code2 = '''
 def func2(x):
@@ -104,11 +130,17 @@ def func2(x):
 '''
     formula6 = python_parser.parse_function(func_code2)
     seq6 = Sequent([], formula6)
-    print(f"Proving {seq6}: {check_sequent_status(prover, seq6)}")
+    status = check_sequent_status(prover, seq6)
+    print(f"\nProving {seq6}: {status}")
+    if prover.last_proof_tree:
+        print_tree(prover.last_proof_tree)
 
     print("\n=== DIRECT SANITY CHECK ===")
     seq_direct = Sequent([], Negation(A))
-    print(f"DIRECT TEST {seq_direct}: {prover.prove(seq_direct)}")
+    status = prover.prove(seq_direct)
+    print(f"\nDIRECT TEST {seq_direct}: {status}")
+    if prover.last_proof_tree:
+        print_tree(prover.last_proof_tree)
 
 
 if __name__ == "__main__":
