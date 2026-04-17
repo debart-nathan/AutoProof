@@ -1,15 +1,26 @@
-import ast
-from .logic.Atomic import Atomic
-from .logic.Equivalence import Equivalence
-from .logic.Implication import Implication
-from .logic.Conjunction import Conjunction
-from .logic.Disjunction import Disjunction
-from .logic.Bottom import Bottom
-from .logic.Negation import Negation
-from .logic.Universal import Universal
-from .logic.Existential import Existential
+"""Parser for Python boolean expressions to logical formulas."""
 
-class PythonParser:
+import ast
+from .formulas import (
+    Atomic, Equivalence, Implication, Conjunction,
+    Disjunction, Bottom, Negation, Universal, Existential
+)
+from .interfaces.parser_interface import ParserInterface
+
+
+class PythonParser(ParserInterface):
+    """
+    Parses Python boolean expressions and code into logical formulas.
+    
+    Examples:
+        a and (not b)  →  Conjunction(Atomic('a'), Negation(Atomic('b')))
+        x == y         →  Equivalence(Atomic('x'), Atomic('y'))
+    """
+    
+    def parse(self, code: str):
+        """Interface method: parse Python code as expression."""
+        return self.parse_expression(code)
+    
     def parse_expression(self, code: str):
         """Parse a Python boolean expression into a logical formula."""
         tree = ast.parse(code, mode='eval')

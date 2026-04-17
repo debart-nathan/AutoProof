@@ -1,12 +1,24 @@
-from .Checker import Checker
-from .Sequent import Sequent
+"""Prover using natural deduction rules for intuitionistic logic."""
 
-class Prover:
+from typing import Literal
+from .checker import Checker
+from .sequent import Sequent
+from .interfaces.prover_interface import ProverInterface
+
+
+class Prover(ProverInterface):
+    """
+    Natural deduction prover for intuitionistic logic.
+    
+    Uses memoization to avoid re-proving identical sequents.
+    Implements LJT (Focused Intuitionistic Logic) transformations.
+    """
     def __init__(self, max_depth: int = 100):
         self.max_depth = max_depth
         self.memo = {}
 
-    def prove(self, sequent, depth: int = 0) -> str:
+    def prove(self, sequent, depth: int = 0) -> Literal['proven', 'disproven', 'unknown']:
+        """Prove a sequent using natural deduction."""
         if depth > self.max_depth:
             return "unknown"
 
@@ -43,6 +55,10 @@ class Prover:
         self.memo[sequent] = "unknown"
         return "unknown"
 
+    def reset_memo(self) -> None:
+        """Clear memoization cache."""
+        self.memo = {}
+
     def handle_premises(self, premises, conn_type, depth):
         if conn_type == 'bottom-left':
             return True
@@ -53,7 +69,8 @@ class Prover:
         if conn_type == 'single':
             return self.prove(premises[0], depth + 1) == "proven"
 
-        if conn_type == 'and':
+        # Treat 'multiple' as "all premises must succeed"
+        if conn_type in ('and', 'multiple'):
             return all(self.prove(p, depth + 1) == "proven" for p in premises)
 
         if conn_type == 'or':

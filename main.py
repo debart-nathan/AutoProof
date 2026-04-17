@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-from core.Parser import Parser
-from core.PythonParser import PythonParser
-from core.Prover import Prover
-from core.Sequent import Sequent
-from core.logic.Atomic import Atomic
-from core.logic.Implication import Implication
-from core.logic.Equivalence import Equivalence
-from core.logic.Negation import Negation
+from core.parser import Parser
+from core.python_parser import PythonParser
+from core.prover import Prover
+from core.sequent import Sequent
+from core.formulas.atomic import Atomic
+from core.formulas.implication import Implication
+from core.formulas.equivalence import Equivalence
+from core.formulas.negation import Negation
 
 
 def check_sequent_status(prover, sequent):
