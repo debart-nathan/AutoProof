@@ -1,4 +1,5 @@
 from .Checker import Checker
+from .Sequent import Sequent
 
 class Prover:
     def __init__(self, max_depth: int = 100):
@@ -9,39 +10,37 @@ class Prover:
         if depth > self.max_depth:
             return "unknown"
 
-        antecedent, succedent = sequent
+        # Convert tuple to Sequent if needed (backward compatibility)
+        if isinstance(sequent, tuple):
+            sequent = Sequent(sequent[0], sequent[1])
 
-        # Canonical antecedent for both memoization AND rule application
-        sorted_antecedent = tuple(sorted(antecedent, key=str))
-        canonical_sequent = (sorted_antecedent, succedent)
+        # Memo lookup (Sequent has proper __hash__ and __eq__)
+        if sequent in self.memo:
+            return self.memo[sequent]
 
-        # Memo lookup
-        if canonical_sequent in self.memo:
-            return self.memo[canonical_sequent]
-
-        # Axiom rule
-        if succedent in sorted_antecedent:
-            self.memo[canonical_sequent] = "proven"
+        # Axiom rule: if succedent is in context
+        if sequent.contains_in_context(sequent.succedent):
+            self.memo[sequent] = "proven"
             return "proven"
 
         # Right rules
-        result_right = succedent.apply_right(canonical_sequent)
+        result_right = sequent.succedent.apply_right(sequent)
         if result_right is not None:
             premises, conn_type = result_right
             if self.handle_premises(premises, conn_type, depth):
-                self.memo[canonical_sequent] = "proven"
+                self.memo[sequent] = "proven"
                 return "proven"
 
-        # Left rules (use canonical antecedent)
-        for formula in sorted_antecedent:
-            result_left = formula.apply_left(canonical_sequent)
+        # Left rules
+        for formula in sequent.antecedent:
+            result_left = formula.apply_left(sequent)
             if result_left is not None:
                 premises, conn_type = result_left
                 if self.handle_premises(premises, conn_type, depth):
-                    self.memo[canonical_sequent] = "proven"
+                    self.memo[sequent] = "proven"
                     return "proven"
 
-        self.memo[canonical_sequent] = "unknown"
+        self.memo[sequent] = "unknown"
         return "unknown"
 
     def handle_premises(self, premises, conn_type, depth):

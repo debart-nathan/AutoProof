@@ -17,14 +17,16 @@ class Implication:
         return hash((self.left, self.right))
 
     def apply_right(self, sequent) -> Optional[Tuple[List, str]]:
-        antecedent, succedent = sequent
+        """→R: Γ ⇒ A → B from Γ, A ⇒ B"""
+        antecedent, succedent = sequent  # Unpack Sequent or tuple
         if self == succedent:
             new_antecedent = antecedent + (self.left,)
-            new_succedent = self.right
-            return ([(new_antecedent, new_succedent)], 'single')
+            new_sequent = (new_antecedent, self.right)
+            return ([new_sequent], 'single')
         return None
 
     def apply_left(self, sequent) -> Optional[Tuple[List, str]]:
+        """LJT transformations for →L"""
         antecedent, succedent = sequent
         if self not in antecedent:
             return None
