@@ -18,13 +18,14 @@ class Parser(ParserInterface):
     - Operators: and, or, not, ->, <->, forall, exists, bottom
     - Unicode: ∧, ∨, ¬, →, ↔, ⊥, ∀, ∃
     """
+
     def __init__(self):
         self.tokens = []
         self.pos = 0
 
     # TOKEN PROCESSING
     def tokenize(self, text):
-        # Normalize common ASCII operator variants
+        # Normalize ASCII operator variants
         ascii_ops = {
             '&&': ' and ',
             '&': ' and ',
@@ -55,18 +56,21 @@ class Parser(ParserInterface):
         for k, v in unicode_ops.items():
             text = text.replace(k, v)
 
-        # Add spacing around parentheses and dots
+        # Space punctuation
         text = (
             text.replace('(', ' ( ')
                 .replace(')', ' ) ')
                 .replace('.', ' . ')
+                .replace(',', ' , ')
         )
 
-        # Ensure core ASCII operators are spaced
-        spaced_ops = ['and', 'or', 'not', '->', '<->', 'forall', 'exists']
+        # Ensure operators are spaced using word boundaries
+        spaced_ops = ['forall', 'exists', 'and', 'or', 'not', '->', '<->']
         for op in spaced_ops:
-            text = text.replace(op, f' {op} ')
+            pattern = rf'\b{re.escape(op)}\b'
+            text = re.sub(pattern, f' {op} ', text)
 
+        # Final token list
         self.tokens = [t for t in text.split() if t]
         self.pos = 0
 
@@ -125,23 +129,35 @@ class Parser(ParserInterface):
         return self.atom()
 
     def atom(self):
+        # Parenthesized formula
         if self._accept('('):
             expr = self.equiv_expr()
             self._expect(')')
             return expr
 
+        # Constants
         if self._accept('bottom'):
             return Bottom()
 
         if self._accept('top'):
             return Atomic('True')
 
+        # Predicates / variables / application
         if self._peek_is_identifier():
             name = self._advance()
 
+            # Function-style: P(x, y)
             if self._accept('('):
                 args = self._parse_term_list()
                 self._expect(')')
+                return Atomic(f"{name}({', '.join(args)})")
+
+            # Application-style: P x y
+            args = []
+            while self._peek_is_identifier():
+                args.append(self._advance())
+
+            if args:
                 return Atomic(f"{name}({', '.join(args)})")
 
             return Atomic(name)
@@ -194,14 +210,26 @@ class Parser(ParserInterface):
 
     def _expect(self, token):
         if not self._accept(token):
-            return
+            raise ValueError(f"Expected '{token}', got '{self._peek()}'")
 
     def _peek_is_identifier(self):
         tok = self._peek()
-        return tok is not None and re.match(r'^[^\(\),]+$', tok)
+        if tok is None:
+            return False
+
+        # Exclude reserved words and punctuation
+        if tok in {
+            'and', 'or', 'not', '->', '<->',
+            'forall', 'exists',
+            'bottom', 'top',
+            '(', ')', '.', ',', 
+        }:
+            return False
+
+        return re.match(r'^[^\(\),]+$', tok) is not None
 
     def _expect_identifier(self, msg):
         tok = self._peek()
-        if tok is None or not re.match(r'^[^\(\),]+$', tok):
+        if tok is None or not self._peek_is_identifier():
             raise ValueError(msg)
         return self._advance()
