@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
+"""
+Comprehensive test suite for the AutoProof intuitionistic prover.
+"""
+
+import core
 from core.parser import Parser
 from core.python_parser import PythonParser
 from core.prover import Prover
 from core.sequent import Sequent
 from core.formula.logic import Atomic, Negation
+from core.formula.arithmetic import Add, Eq, Succ, Zero
 
 
 def print_tree(node, indent=0):
@@ -13,24 +19,15 @@ def print_tree(node, indent=0):
         print_tree(p, indent + 1)
 
 
-def check_sequent_status(prover, sequent):
-    """
-    Determine whether a sequent is proven, disproven, or unknown.
-    IMPORTANT: does NOT overwrite the proof tree for the original sequent.
-    """
-    status, tree = prover._prove(sequent, 0)
-    prover.last_proof_tree = tree  # preserve the original proof tree
-
-    if status == "proven":
-        return "proven"
-
-    negated_seq = Sequent(sequent.antecedent, Negation(sequent.succedent))
-    status_neg, _ = prover._prove(negated_seq, 0)
-
-    if status_neg == "proven":
-        return "disproven"
-
-    return "unknown"
+def run_tests(prover, tests, title):
+    """Run a list of (antecedent, succedent) tests under a section title."""
+    print(f"\n=== {title} ===")
+    for ant, succ in tests:
+        seq = Sequent(ant, succ)
+        status = prover.prove(seq)
+        print(f"\nProving {seq}: {status}")
+        if prover.last_proof_tree:
+            print_tree(prover.last_proof_tree)
 
 
 def main():
@@ -38,43 +35,37 @@ def main():
     python_parser = PythonParser()
     prover = Prover()
 
-    print("\n=== BASIC INTUITIONISTIC VALIDITIES ===")
-    tests = [
-        ("A -> A", []),
-        ("(A ∧ B) -> A", []),
-        ("A -> (B -> A)", []),
-        ("A -> ¬¬A", []),
-        ("¬A -> (A -> ⊥)", []),
-        ("A <-> A", []),
-        ("forall x. (P x -> P x)", []),
+    # ----------------------------------------------------------------------
+    # BASIC INTUITIONISTIC VALIDITIES
+    # ----------------------------------------------------------------------
+    basic_tests = [
+        ([], parser.parse("A -> A")),
+        ([], parser.parse("(A ∧ B) -> A")),
+        ([], parser.parse("A -> (B -> A)")),
+        ([], parser.parse("A -> ¬¬A")),
+        ([], parser.parse("¬A -> (A -> ⊥)")),
+        ([], parser.parse("A <-> A")),
+        ([], parser.parse("forall x. (P(x) -> P(x))")),
     ]
 
-    for text, ant in tests:
-        formula = parser.parse(text)
-        seq = Sequent(ant, formula)
-        status = check_sequent_status(prover, seq)
-        print(f"\nProving {seq}: {status}")
-        if prover.last_proof_tree:
-            print_tree(prover.last_proof_tree)
+    run_tests(prover, basic_tests, "BASIC INTUITIONISTIC VALIDITIES")
 
-    print("\n=== NON-PROVABLE / UNKNOWN SEQUENTS ===")
-    tests = [
-        ("¬A", []),
-        ("A", []),
-        ("¬¬A -> A", []),
-        ("A ∨ ¬A", []),
-        ("A ∧ ¬A", []),
+    # ----------------------------------------------------------------------
+    # NON-PROVABLE / UNKNOWN SEQUENTS
+    # ----------------------------------------------------------------------
+    nonprovable_tests = [
+        ([], parser.parse("¬A")),
+        ([], parser.parse("A")),
+        ([], parser.parse("¬¬A -> A")),
+        ([], parser.parse("A ∨ ¬A")),
+        ([], parser.parse("A ∧ ¬A")),
     ]
 
-    for text, ant in tests:
-        formula = parser.parse(text)
-        seq = Sequent(ant, formula)
-        status = check_sequent_status(prover, seq)
-        print(f"\nProving {seq}: {status}")
-        if prover.last_proof_tree:
-            print_tree(prover.last_proof_tree)
+    run_tests(prover, nonprovable_tests, "NON-PROVABLE / UNKNOWN SEQUENTS")
 
-    print("\n=== EXPLOSION TESTS (Γ, ⊥ ⇒ anything) ===")
+    # ----------------------------------------------------------------------
+    # EXPLOSION TESTS
+    # ----------------------------------------------------------------------
     A = Atomic("A")
     B = Atomic("B")
     notA = Negation(A)
@@ -84,28 +75,44 @@ def main():
         ([notA], A),
     ]
 
-    for ant, succ in explosion_tests:
-        seq = Sequent(ant, succ)
-        status = check_sequent_status(prover, seq)
-        print(f"\nProving {seq}: {status}")
-        if prover.last_proof_tree:
-            print_tree(prover.last_proof_tree)
+    run_tests(prover, explosion_tests, "EXPLOSION TESTS (Γ, ⊥ ⇒ anything)")
 
-    print("\n=== DOUBLE NEGATION TESTS ===")
+    # ----------------------------------------------------------------------
+    # DOUBLE NEGATION TESTS
+    # ----------------------------------------------------------------------
     dn_tests = [
         ([], Negation(Negation(A))),
         ([Negation(Negation(A))], A),
     ]
 
-    for ant, succ in dn_tests:
-        seq = Sequent(ant, succ)
-        status = check_sequent_status(prover, seq)
-        print(f"\nProving {seq}: {status}")
-        if prover.last_proof_tree:
-            print_tree(prover.last_proof_tree)
+    run_tests(prover, dn_tests, "DOUBLE NEGATION TESTS")
 
-    print("\n=== PYTHON PARSER TESTS ===")
+    # ----------------------------------------------------------------------
+    # ARITHMETIC ADDITION TESTS (parsed)
+    # ----------------------------------------------------------------------
+    arithmetic_tests = [
+        ([], parser.parse("S(0) + 0 = S(0)")),
+        ([], parser.parse("S(0) + S(0) = S(S(0))")),
+        ([], parser.parse("(S(S(0)) + 0) = S(S(0))")),
+    ]
 
+    run_tests(prover, arithmetic_tests, "ARITHMETIC ADDITION TESTS")
+
+    # ----------------------------------------------------------------------
+    # EQUALITY THEORY TESTS (parsed)
+    # ----------------------------------------------------------------------
+    equality_tests = [
+        ([], parser.parse("a = a")),                     # reflexivity
+        ([parser.parse("b = a")], parser.parse("a = b")),  # symmetry
+        ([parser.parse("a = b"), parser.parse("b = c")],
+         parser.parse("a = c")),                         # transitivity
+    ]
+
+    run_tests(prover, equality_tests, "EQUALITY THEORY TESTS")
+
+    # ----------------------------------------------------------------------
+    # PYTHON PARSER TESTS
+    # ----------------------------------------------------------------------
     func_code = '''
 def func(x):
     y = x + 1
@@ -114,12 +121,7 @@ def func(x):
     else:
         return False
 '''
-    formula5 = python_parser.parse_function(func_code)
-    seq5 = Sequent([], formula5)
-    status = check_sequent_status(prover, seq5)
-    print(f"\nProving {seq5}: {status}")
-    if prover.last_proof_tree:
-        print_tree(prover.last_proof_tree)
+    func_formula = python_parser.parse_function(func_code)
 
     func_code2 = '''
 def func2(x):
@@ -127,19 +129,19 @@ def func2(x):
         pass
     return True
 '''
-    formula6 = python_parser.parse_function(func_code2)
-    seq6 = Sequent([], formula6)
-    status = check_sequent_status(prover, seq6)
-    print(f"\nProving {seq6}: {status}")
-    if prover.last_proof_tree:
-        print_tree(prover.last_proof_tree)
+    func_formula2 = python_parser.parse_function(func_code2)
 
-    print("\n=== DIRECT SANITY CHECK ===")
-    seq_direct = Sequent([], Negation(A))
-    status = prover.prove(seq_direct)
-    print(f"\nDIRECT TEST {seq_direct}: {status}")
-    if prover.last_proof_tree:
-        print_tree(prover.last_proof_tree)
+    python_tests = [
+        ([], func_formula),
+        ([], func_formula2),
+    ]
+
+    run_tests(prover, python_tests, "PYTHON PARSER TESTS")
+
+    # ----------------------------------------------------------------------
+    # DIRECT SANITY CHECK
+    # ----------------------------------------------------------------------
+    run_tests(prover, [([], Negation(A))], "DIRECT SANITY CHECK")
 
 
 if __name__ == "__main__":

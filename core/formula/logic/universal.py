@@ -2,7 +2,6 @@
 
 from typing import List, Optional, Tuple
 from ...interfaces.formula import Formula
-from ...sequent import Sequent
 
 
 # --- helpers (you can move them elsewhere later) ---

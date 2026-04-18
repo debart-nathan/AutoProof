@@ -1,19 +1,29 @@
 """Parser for Python boolean expressions to logical formulas."""
 
 import ast
-from typing import List, Optional
-from .formulas import (
+from typing import List
+
+# Logic formulas
+from .formula.logic import (
     Atomic, Equivalence, Implication, Conjunction,
     Disjunction, Bottom, Negation, Universal, Existential
 )
+
+# Arithmetic / comparison formulas
+from .formula.arithmetic import (
+    Add, Sub, Mul, Div,
+    Eq, NotEq, Lt, Gt, Le, Ge,
+    Zero, Succ,
+)
+
 from .interfaces.parser_interface import ParserInterface
 from .interfaces.formula import Formula
 
 
 class PythonParser(ParserInterface):
     """
-    Improved parser for Python boolean expressions and code.
-    Produces cleaner logical formulas with structured arithmetic and comparisons.
+    Parser for Python boolean expressions and code.
+    Produces structured logical formulas using Formula subclasses.
     """
 
     # -----------------------------
@@ -25,6 +35,11 @@ class PythonParser(ParserInterface):
     def parse_expression(self, code: str) -> Formula:
         tree = ast.parse(code, mode='eval')
         return self._visit(tree.body)
+
+    def parse_function(self, code: str) -> Formula:
+        tree = ast.parse(code)
+        func = tree.body[0]
+        return self._visit_stmts(func.body)
 
     # -----------------------------
     # Core visitor
@@ -120,6 +135,8 @@ class PythonParser(ParserInterface):
             return Atomic("True")
         if node.value is False:
             return Bottom()
+        if isinstance(node.value, int) and node.value == 0:
+            return Zero()
         return Atomic(str(node.value))
 
     def _visit_compare(self, node: ast.Compare) -> Formula:
@@ -128,30 +145,36 @@ class PythonParser(ParserInterface):
         op = node.ops[0]
 
         op_map = {
-            ast.Eq: "Eq",
-            ast.NotEq: "NotEq",
-            ast.Lt: "Lt",
-            ast.Gt: "Gt",
-            ast.LtE: "Le",
-            ast.GtE: "Ge",
+            ast.Eq: Eq,
+            ast.NotEq: NotEq,
+            ast.Lt: Lt,
+            ast.Gt: Gt,
+            ast.LtE: Le,
+            ast.GtE: Ge,
         }
 
-        op_name = op_map.get(type(op), type(op).__name__)
-        return Atomic(f"{op_name}({left}, {right})")
+        op_class = op_map.get(type(op))
+        if op_class is None:
+            raise ValueError("Unsupported comparison operator")
+
+        return op_class(left, right)
 
     def _visit_binop(self, node: ast.BinOp) -> Formula:
         left = self._visit(node.left)
         right = self._visit(node.right)
 
         op_map = {
-            ast.Add: "Add",
-            ast.Sub: "Sub",
-            ast.Mult: "Mul",
-            ast.Div: "Div",
+            ast.Add: Add,
+            ast.Sub: Sub,
+            ast.Mult: Mul,
+            ast.Div: Div,
         }
 
-        op_name = op_map.get(type(node.op), type(node.op).__name__)
-        return Atomic(f"{op_name}({left}, {right})")
+        op_class = op_map.get(type(node.op))
+        if op_class is None:
+            raise ValueError("Unsupported arithmetic operator")
+
+        return op_class(left, right)
 
     def _visit_call(self, node: ast.Call) -> Formula:
         func = self._visit(node.func)
@@ -163,7 +186,7 @@ class PythonParser(ParserInterface):
         target = node.targets[0]
         if isinstance(target, ast.Name):
             value = self._visit(node.value)
-            return Atomic(f"Eq({target.id}, {value})")
+            return Eq(Atomic(target.id), value)
         raise ValueError("Unsupported assignment target")
 
     def _visit_if(self, node: ast.If) -> Formula:
@@ -195,8 +218,3 @@ class PythonParser(ParserInterface):
             part = self._visit(stmt)
             f = part if f is None else Conjunction(f, part)
         return f
-
-    def parse_function(self, code: str) -> Formula:
-        tree = ast.parse(code)
-        func = tree.body[0]
-        return self._visit_stmts(func.body)

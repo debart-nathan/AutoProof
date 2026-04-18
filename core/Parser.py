@@ -10,10 +10,11 @@ from .formula.logic import (
     Disjunction, Bottom, Negation, Universal, Existential
 )
 
-# Arithmetic formulas
+# Arithmetic / comparison formulas
 from .formula.arithmetic import (
     Add, Sub, Mul, Div,
-    Eq, NotEq, Lt, Gt, Le, Ge
+    Eq, NotEq, Lt, Gt, Le, Ge,
+    Zero, Succ,
 )
 
 from .interfaces.parser_interface import ParserInterface
@@ -28,64 +29,78 @@ class Parser(ParserInterface):
         self.tokens = []
         self.pos = 0
 
-    # -----------------------------
-    # TOKEN PROCESSING
-    # -----------------------------
+    # ============================================================
+    # TOKENIZER (robust, regex-based)
+    # ============================================================
     def tokenize(self, text):
-        ascii_ops = {
-            '&&': ' and ',
-            '&': ' and ',
-            '||': ' or ',
-            '|': ' or ',
-            '!': ' not ',
-            '~': ' not ',
-            '=>': ' -> ',
-            '==>': ' -> ',
-            '<=>': ' <-> ',
-            '<==>' : ' <-> ',
-        }
-        for k, v in ascii_ops.items():
-            text = text.replace(k, v)
+        # Normalize unicode operators
+        text = text.replace('∧', ' and ')
+        text = text.replace('∨', ' or ')
+        text = text.replace('¬', ' not ')
+        text = text.replace('→', ' -> ')
+        text = text.replace('↔', ' <-> ')
+        text = text.replace('⊥', ' bottom ')
+        text = text.replace('⊤', ' top ')
+        text = text.replace('∀', ' forall ')
+        text = text.replace('∃', ' exists ')
 
-        unicode_ops = {
-            '∧': ' and ',
-            '∨': ' or ',
-            '¬': ' not ',
-            '→': ' -> ',
-            '↔': ' <-> ',
-            '⊥': ' bottom ',
-            '⊤': ' top ',
-            '∀': ' forall ',
-            '∃': ' exists ',
-        }
-        for k, v in unicode_ops.items():
-            text = text.replace(k, v)
+        token_spec = [
+            (r'<->', '<->'),
+            (r'->', '->'),
+            (r'<=', '<='),
+            (r'>=', '>='),
+            (r'!=', '!='),
+            (r'\(', '('),
+            (r'\)', ')'),
+            (r'\.', '.'),
+            (r',', ','),
+            (r'\+', '+'),
+            (r'-', '-'),
+            (r'\*', '*'),
+            (r'/', '/'),
+            (r'=', '='),
+            (r'<', '<'),
+            (r'>', '>'),
+            (r'\bforall\b', 'forall'),
+            (r'\bexists\b', 'exists'),
+            (r'\band\b', 'and'),
+            (r'\bor\b', 'or'),
+            (r'\bnot\b', 'not'),
+            (r'\bbottom\b', 'bottom'),
+            (r'\btop\b', 'top'),
+            (r'[0-9]+', 'NUMBER'),
+            (r'[A-Za-z_][A-Za-z0-9_]*', 'IDENT'),
+            (r'\s+', None),
+        ]
 
-        text = (
-            text.replace('(', ' ( ')
-                .replace(')', ' ) ')
-                .replace('.', ' . ')
-                .replace(',', ' , ')
-        )
+        master = '|'.join(f'(?P<T{i}>{pat})' for i, (pat, _) in enumerate(token_spec))
+        regex = re.compile(master)
 
-        spaced_ops = ['forall', 'exists', 'and', 'or', 'not', '->', '<->']
-        for op in spaced_ops:
-            pattern = rf'\b{re.escape(op)}\b'
-            text = re.sub(pattern, f' {op} ', text)
+        tokens = []
+        for m in regex.finditer(text):
+            for i, (_, value) in enumerate(token_spec):
+                if m.lastgroup == f'T{i}':
+                    if value is None:
+                        break
+                    if value in ('NUMBER', 'IDENT'):
+                        tokens.append(m.group())
+                    else:
+                        tokens.append(value)
+                    break
 
-        self.tokens = [t for t in text.split() if t]
+        self.tokens = tokens
         self.pos = 0
 
-    # -----------------------------
+    # ============================================================
     # PARSE ENTRY
-    # -----------------------------
+    # ============================================================
     def parse(self, text):
         self.tokenize(text)
         return self.equiv_expr()
 
-    # -----------------------------
+    # ============================================================
     # FORMULA GRAMMAR
-    # -----------------------------
+    # ============================================================
     def equiv_expr(self):
         left = self.impl_expr()
         while self._accept('<->'):
@@ -121,72 +136,133 @@ class Parser(ParserInterface):
 
     def quantifier_expr(self):
         if self._accept('forall'):
-            var = self._expect_identifier('Expected variable after forall')
+            var = self._expect_identifier("Expected variable after forall")
             self._expect('.')
-            body = self.unary_expr()
-            return Universal(var, body)
+            return Universal(var, self.equiv_expr())
 
         if self._accept('exists'):
-            var = self._expect_identifier('Expected variable after exists')
+            var = self._expect_identifier("Expected variable after exists")
             self._expect('.')
-            body = self.unary_expr()
-            return Existential(var, body)
+            return Existential(var, self.equiv_expr())
 
         return self.atom()
 
-    # -----------------------------
-    # ATOMS AND TERMS
-    # -----------------------------
+    # ============================================================
+    # ATOMS (formulas, comparisons, terms)
+    # ============================================================
     def atom(self):
+        # Parenthesized expression: could be formula OR term
         if self._accept('('):
             expr = self.equiv_expr()
             self._expect(')')
+
+            # If next token is a comparison operator, treat expr as a TERM
+            if self._peek() in ('=', '!=', '<', '>', '<=', '>='):
+                left = expr
+                if self._accept('='):
+                    return Eq(left, self.term_expr())
+                if self._accept('!='):
+                    return NotEq(left, self.term_expr())
+                if self._accept('<'):
+                    return Lt(left, self.term_expr())
+                if self._accept('>'):
+                    return Gt(left, self.term_expr())
+                if self._accept('<='):
+                    return Le(left, self.term_expr())
+                if self._accept('>='):
+                    return Ge(left, self.term_expr())
+
             return expr
 
+        # bottom / top
         if self._accept('bottom'):
             return Bottom()
-
         if self._accept('top'):
             return Atomic("True")
 
-        if self._peek_is_identifier():
-            name = self._advance()
+        # IDENT or NUMBER → term or comparison
+        if self._peek_is_identifier() or self._peek_is_number():
+            left = self.term_expr()
 
-            # Function-style: P(x, y)
-            if self._accept('('):
-                args = self._parse_term_list()
-                self._expect(')')
-                return Atomic(name, args)
+            # comparison operators
+            if self._accept('='):
+                return Eq(left, self.term_expr())
+            if self._accept('!='):
+                return NotEq(left, self.term_expr())
+            if self._accept('<'):
+                return Lt(left, self.term_expr())
+            if self._accept('>'):
+                return Gt(left, self.term_expr())
+            if self._accept('<='):
+                return Le(left, self.term_expr())
+            if self._accept('>='):
+                return Ge(left, self.term_expr())
 
-            # Application-style: P x y
-            args = []
-            while self._peek_is_identifier():
-                args.append(self._parse_term())
-
-            if args:
-                return Atomic(name, args)
-
-            return Atomic(name)
+            return left
 
         raise ValueError(f"Unexpected token: {self._peek()}")
 
-    # -----------------------------
-    # TERM PARSING
-    # -----------------------------
-    def _parse_term(self):
-        """Parse arithmetic terms."""
+    # ============================================================
+    # TERM GRAMMAR
+    # ============================================================
+    def term_expr(self):
+        return self._parse_add()
+
+    def _parse_add(self):
+        left = self._parse_mul()
+        while True:
+            if self._accept('+'):
+                left = Add(left, self._parse_mul())
+            elif self._accept('-'):
+                left = Sub(left, self._parse_mul())
+            else:
+                break
+        return left
+
+    def _parse_mul(self):
+        left = self._parse_factor()
+        while True:
+            if self._accept('*'):
+                left = Mul(left, self._parse_factor())
+            elif self._accept('/'):
+                left = Div(left, self._parse_factor())
+            else:
+                break
+        return left
+
+    def _parse_factor(self):
         tok = self._peek()
 
         # Parenthesized term
         if tok == '(':
             self._advance()
-            term = self._parse_term()
+            expr = self.term_expr()
             self._expect(')')
-            return term
+            return expr
 
-        # Variable or constant
+        # Number
+        if self._peek_is_number():
+            num = self._advance()
+            if num == '0':
+                return Zero()
+            return Atomic(num)
+
+        # Identifier or function term
         if self._peek_is_identifier():
             name = self._advance()
+
+            # S(t) → Succ(t)
+            if name == 'S' and self._accept('('):
+                inner = self.term_expr()
+                self._expect(')')
+                return Succ(inner)
+
+            # generic function-style term
+            if self._accept('('):
+                args = self._parse_term_list()
+                self._expect(')')
+                return Atomic(name, args)
+
             return Atomic(name)
 
         raise ValueError(f"Invalid term: {tok}")
@@ -194,14 +270,14 @@ class Parser(ParserInterface):
     def _parse_term_list(self):
         args = []
         while True:
-            args.append(self._parse_term())
+            args.append(self.term_expr())
             if not self._accept(','):
                 break
         return args
 
-    # -----------------------------
+    # ============================================================
     # TOKEN HELPERS
-    # -----------------------------
+    # ============================================================
     def _peek(self):
         return self.tokens[self.pos] if self.pos < len(self.tokens) else None
 
@@ -226,14 +302,11 @@ class Parser(ParserInterface):
         tok = self._peek()
         if tok is None:
             return False
-        if tok in {
-            'and', 'or', 'not', '->', '<->',
-            'forall', 'exists',
-            'bottom', 'top',
-            '(', ')', '.', ',', 
-        }:
-            return False
-        return re.match(r'^[^\(\),]+$', tok) is not None
+        return re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', tok) is not None
+
+    def _peek_is_number(self):
+        tok = self._peek()
+        return tok is not None and tok.isdigit()
 
     def _expect_identifier(self, msg):
         if not self._peek_is_identifier():

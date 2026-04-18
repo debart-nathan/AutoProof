@@ -46,11 +46,35 @@ class Formula(ABC):
         Same return contract as apply_right().
         """
         pass
+    
+    def rewrite_once(self) -> Tuple[Optional["Formula"], Optional[str]]:
+        """
+        Attempt ONE rewrite step on this term.
 
+        Returns:
+            (new_term, rule_name) if a rewrite applies
+            (None, None) otherwise
+
+        Default: no rewrite.
+        """
+        return None, None
+    
+    def occurs(self, subterm) -> bool:
+        """
+        Return True if subterm occurs inside this formula.
+        Default: no occurrences.
+        Concrete formulas override this.
+        """
+        return False
+    
     @abstractmethod
     def substitute(self, var, term) -> "Formula":
         """Return a new formula with all free occurrences of var replaced by term."""
         pass
+
+    def simplify(self) -> "Formula":
+        """Return a simplified version of the formula using arithmetic rules."""
+        return self
 
     @abstractmethod
     def __str__(self) -> str:
