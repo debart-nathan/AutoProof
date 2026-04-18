@@ -1,7 +1,7 @@
 """Equivalence formula (A ↔ B)."""
 
 from typing import List, Optional, Tuple
-from ..interfaces.formula import Formula
+from ...interfaces.formula import Formula
 from .implication import Implication
 
 

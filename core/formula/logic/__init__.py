@@ -1,5 +1,6 @@
 """
-Logical formula types for the AutoProof system.
+Logic formulas for the AutoProof system.
+Supports classical and intuitionistic logic.
 """
 
 from .atomic import Atomic
@@ -23,5 +24,5 @@ __all__ = [
     "Implication",
     "Negation",
     "Universal",
-    "Truth"
+    "Truth",
 ]

@@ -1,7 +1,7 @@
 """Bottom (falsum) formula ⊥."""
 
 from typing import Optional, Tuple, List
-from ..interfaces.formula import Formula
+from ...interfaces.formula import Formula
 
 
 class Bottom(Formula):

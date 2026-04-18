@@ -3,8 +3,7 @@ from core.parser import Parser
 from core.python_parser import PythonParser
 from core.prover import Prover
 from core.sequent import Sequent
-from core.formulas.atomic import Atomic
-from core.formulas.negation import Negation
+from core.formula.logic import Atomic, Negation
 
 
 def print_tree(node, indent=0):

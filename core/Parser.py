@@ -3,29 +3,35 @@ Parser for logical formulas in standard mathematical notation.
 """
 
 import re
-from .formulas import (
+
+# Logic formulas
+from .formula.logic import (
     Atomic, Implication, Equivalence, Conjunction,
     Disjunction, Bottom, Negation, Universal, Existential
 )
+
+# Arithmetic formulas
+from .formula.arithmetic import (
+    Add, Sub, Mul, Div,
+    Eq, NotEq, Lt, Gt, Le, Ge
+)
+
 from .interfaces.parser_interface import ParserInterface
 
 
 class Parser(ParserInterface):
     """
-    Standard mathematical logic parser.
-
-    Supports standard logic notation:
-    - Operators: and, or, not, ->, <->, forall, exists, bottom
-    - Unicode: ∧, ∨, ¬, →, ↔, ⊥, ∀, ∃
+    Standard mathematical logic parser with arithmetic term support.
     """
 
     def __init__(self):
         self.tokens = []
         self.pos = 0
 
+    # -----------------------------
     # TOKEN PROCESSING
+    # -----------------------------
     def tokenize(self, text):
-        # Normalize ASCII operator variants
         ascii_ops = {
             '&&': ' and ',
             '&': ' and ',
@@ -41,7 +47,6 @@ class Parser(ParserInterface):
         for k, v in ascii_ops.items():
             text = text.replace(k, v)
 
-        # Normalize Unicode operators
         unicode_ops = {
             '∧': ' and ',
             '∨': ' or ',
@@ -56,7 +61,6 @@ class Parser(ParserInterface):
         for k, v in unicode_ops.items():
             text = text.replace(k, v)
 
-        # Space punctuation
         text = (
             text.replace('(', ' ( ')
                 .replace(')', ' ) ')
@@ -64,22 +68,24 @@ class Parser(ParserInterface):
                 .replace(',', ' , ')
         )
 
-        # Ensure operators are spaced using word boundaries
         spaced_ops = ['forall', 'exists', 'and', 'or', 'not', '->', '<->']
         for op in spaced_ops:
             pattern = rf'\b{re.escape(op)}\b'
             text = re.sub(pattern, f' {op} ', text)
 
-        # Final token list
         self.tokens = [t for t in text.split() if t]
         self.pos = 0
 
+    # -----------------------------
+    # PARSE ENTRY
+    # -----------------------------
     def parse(self, text):
         self.tokenize(text)
-        result = self.equiv_expr()
-        return result
+        return self.equiv_expr()
 
-    # GRAMMAR IMPLEMENTATION
+    # -----------------------------
+    # FORMULA GRAMMAR
+    # -----------------------------
     def equiv_expr(self):
         left = self.impl_expr()
         while self._accept('<->'):
@@ -128,21 +134,21 @@ class Parser(ParserInterface):
 
         return self.atom()
 
+    # -----------------------------
+    # ATOMS AND TERMS
+    # -----------------------------
     def atom(self):
-        # Parenthesized formula
         if self._accept('('):
             expr = self.equiv_expr()
             self._expect(')')
             return expr
 
-        # Constants
         if self._accept('bottom'):
             return Bottom()
 
         if self._accept('top'):
-            return Atomic('True')
+            return Atomic("True")
 
-        # Predicates / variables / application
         if self._peek_is_identifier():
             name = self._advance()
 
@@ -150,48 +156,52 @@ class Parser(ParserInterface):
             if self._accept('('):
                 args = self._parse_term_list()
                 self._expect(')')
-                return Atomic(f"{name}({', '.join(args)})")
+                return Atomic(name, args)
 
             # Application-style: P x y
             args = []
             while self._peek_is_identifier():
-                args.append(self._advance())
+                args.append(self._parse_term())
 
             if args:
-                return Atomic(f"{name}({', '.join(args)})")
+                return Atomic(name, args)
 
             return Atomic(name)
 
         raise ValueError(f"Unexpected token: {self._peek()}")
 
+    # -----------------------------
+    # TERM PARSING
+    # -----------------------------
+    def _parse_term(self):
+        """Parse arithmetic terms."""
+        tok = self._peek()
+
+        # Parenthesized term
+        if tok == '(':
+            self._advance()
+            term = self._parse_term()
+            self._expect(')')
+            return term
+
+        # Variable or constant
+        if self._peek_is_identifier():
+            name = self._advance()
+            return Atomic(name)
+
+        raise ValueError(f"Invalid term: {tok}")
+
     def _parse_term_list(self):
         args = []
-        current = []
-        depth = 0
-
         while True:
-            tok = self._peek()
-            if tok is None:
-                raise ValueError("Unclosed term list")
-
-            if tok == '(':
-                depth += 1
-                current.append(self._advance())
-            elif tok == ')':
-                if depth == 0:
-                    break
-                depth -= 1
-                current.append(self._advance())
-            elif tok == ',' and depth == 0:
-                self._advance()
-                args.append(' '.join(current))
-                current = []
-            else:
-                current.append(self._advance())
-
-        args.append(' '.join(current))
+            args.append(self._parse_term())
+            if not self._accept(','):
+                break
         return args
 
+    # -----------------------------
+    # TOKEN HELPERS
+    # -----------------------------
     def _peek(self):
         return self.tokens[self.pos] if self.pos < len(self.tokens) else None
 
@@ -216,8 +226,6 @@ class Parser(ParserInterface):
         tok = self._peek()
         if tok is None:
             return False
-
-        # Exclude reserved words and punctuation
         if tok in {
             'and', 'or', 'not', '->', '<->',
             'forall', 'exists',
@@ -225,11 +233,9 @@ class Parser(ParserInterface):
             '(', ')', '.', ',', 
         }:
             return False
-
         return re.match(r'^[^\(\),]+$', tok) is not None
 
     def _expect_identifier(self, msg):
-        tok = self._peek()
-        if tok is None or not self._peek_is_identifier():
+        if not self._peek_is_identifier():
             raise ValueError(msg)
         return self._advance()

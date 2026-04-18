@@ -1,8 +1,8 @@
 """Universal quantifier formula (∀x.A)."""
 
 from typing import List, Optional, Tuple
-from ..interfaces.formula import Formula
-from ..sequent import Sequent
+from ...interfaces.formula import Formula
+from ...sequent import Sequent
 
 
 # --- helpers (you can move them elsewhere later) ---
@@ -99,22 +99,17 @@ class Universal(Formula):
         """
         ∀L (instantiation rule):
             from Γ, A[x := t] ⇒ C infer Γ, ∀x.A ⇒ C
-        for any term t.
+        where t is any term (we use a fresh constant).
         """
         antecedent, succedent = sequent
-
         if self not in antecedent:
             return None
 
-        base = [f for f in antecedent if f != self]
+        idx = antecedent.index(self)
+        base = list(antecedent[:idx]) + list(antecedent[idx+1:])
 
-        terms = extract_terms_from_context(antecedent)
-        terms.append(fresh_constant())
+        t = fresh_constant()
+        instantiated = self.formula.substitute(self.var, t)
 
-        premises: List[Tuple[List[Formula], Formula]] = []
-        for t in terms:
-            instantiated = self.formula.substitute(self.var, t)
-            new_ant = base + [instantiated]
-            premises.append((new_ant, succedent))
-
-        return (premises, 'multiple')
+        new_ant = base + [instantiated]
+        return ([(new_ant, succedent)], 'single')

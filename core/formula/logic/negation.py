@@ -1,7 +1,7 @@
 """Negation formula (¬A)."""
 
 from typing import List, Optional, Tuple
-from ..interfaces.formula import Formula
+from ...interfaces.formula import Formula
 from .bottom import Bottom
 
 

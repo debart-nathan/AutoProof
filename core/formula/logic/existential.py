@@ -1,7 +1,7 @@
 """Existential quantifier formula (∃x.A)."""
 
 from typing import List, Optional, Tuple
-from ..interfaces.formula import Formula
+from ...interfaces.formula import Formula
 from .universal import fresh_constant   # reuse your fresh constant generator
 
 
